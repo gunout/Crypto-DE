@@ -1,0 +1,10 @@
+streamlit
+pynacl
+qrcode
+pillow
+pandas
+plotly
+numpy
+psutil
+cryptography
+scipy
