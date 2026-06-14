@@ -123,10 +123,15 @@ def gradation_to_text(gradation):
 def generate_complete_crypto_for_word(word):
     """
     Génère une cryptographie complète et unique pour un mot donné
-    Retourne un tuple (dict_or_None, error_or_None)
+    Retourne un tuple (dict, None) en cas de succès ou (None, str) en cas d'erreur
     """
     try:
         word_clean = word.upper().strip()
+        
+        # Vérification que le mot contient uniquement des lettres
+        if not re.match(r'^[A-Z]+$', word_clean):
+            return None, f"Le mot '{word}' contient des caractères non valides. Utilisez uniquement des lettres A-Z."
+        
         gradation, error = text_to_gradation(word_clean)
         if error:
             return None, error
@@ -193,8 +198,8 @@ def generate_complete_crypto_for_word(word):
         # Certificat X.509 simulé
         certificate = generate_simulated_certificate(word_clean, public_key, timestamp)
         
-        # Retourner un dictionnaire unique
-        return {
+        # Dictionnaire complet
+        crypto_dict = {
             "mot": word_clean,
             "gradation": gradation,
             "public_key": public_key,
@@ -210,10 +215,12 @@ def generate_complete_crypto_for_word(word):
             "timestamp": timestamp,
             "salt": salt,
             "seed_fingerprint": hashlib.sha256(master_seed).hexdigest()[:32]
-        }, None
+        }
+        
+        return crypto_dict, None
         
     except Exception as e:
-        return None, str(e)
+        return None, f"Erreur lors de la génération: {str(e)}"
 
 def generate_simulated_certificate(word, public_key, timestamp):
     """Génère un certificat X.509 simulé unique pour chaque mot"""
@@ -358,15 +365,6 @@ st.markdown("""
     .stButton > button:hover { background: #2a2a3e; border-color: #00ff88; transform: scale(1.02); }
     
     hr { border-color: #2a2a3e; }
-    
-    .hash-box {
-        font-family: monospace;
-        background: #0a0a15;
-        padding: 0.5rem;
-        border-radius: 8px;
-        font-size: 0.8rem;
-        word-break: break-all;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -386,11 +384,12 @@ def load_word_crypto(word):
     """Charge la cryptographie complète pour un mot avec gestion d'erreurs"""
     try:
         with st.spinner(f"🔐 Génération de la cryptographie pour '{word}'..."):
-            time.sleep(0.2)
+            time.sleep(0.3)  # Petit délai pour l'animation
+            
             crypto_data, error = generate_complete_crypto_for_word(word)
             
             if error:
-                st.session_state.error_message = f"Erreur: {error}"
+                st.session_state.error_message = error
                 return False, None
             
             if crypto_data and isinstance(crypto_data, dict):
@@ -398,7 +397,7 @@ def load_word_crypto(word):
                 st.session_state.last_word = word
                 st.session_state.error_message = None
                 
-                # Ajouter à l'historique (vérification sécurisée)
+                # Ajouter à l'historique
                 try:
                     fingerprint = crypto_data.get('public_key', '')[:16] if crypto_data.get('public_key') else 'N/A'
                     st.session_state.crypto_history.insert(0, {
@@ -407,13 +406,14 @@ def load_word_crypto(word):
                         "fingerprint": fingerprint
                     })
                     st.session_state.crypto_history = st.session_state.crypto_history[:10]
-                except:
-                    pass
+                except Exception as e:
+                    print(f"Erreur historique: {e}")
                 
                 return True, crypto_data
             else:
                 st.session_state.error_message = "Erreur: Données cryptographiques invalides"
                 return False, None
+                
     except Exception as e:
         st.session_state.error_message = f"Erreur inattendue: {str(e)}"
         return False, None
@@ -437,55 +437,47 @@ with st.sidebar:
     st.markdown("#### 📝 Choisir un mot")
     
     # Mot personnalisé
-    custom_word = st.text_input("Mot personnalisé:", value=st.session_state.last_word)
-    if st.button("🔒 Générer la crypto complète", use_container_width=True):
-        success, crypto = load_word_crypto(custom_word)
-        if success:
-            st.success(f"✅ Crypto générée pour '{custom_word}'")
-            st.rerun()
-        else:
-            st.error("❌ Erreur de génération")
+    custom_word = st.text_input("Mot personnalisé:", value=st.session_state.last_word, key="custom_word")
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("🔒 Générer", use_container_width=True, key="gen_btn"):
+            success, _ = load_word_crypto(custom_word)
+            if success:
+                st.success(f"✅ Crypto générée")
+                st.rerun()
+            else:
+                st.error("❌ Erreur")
     
     st.markdown("---")
     
     # Mots du dictionnaire
-    st.markdown("#### 📚 Mots du dictionnaire")
+    st.markdown("#### 📚 Dictionnaire")
     available_words = sorted(list(DICTIONNAIRE_FR.keys()))
-    selected_word = st.selectbox("Sélectionner un mot:", available_words)
-    if st.button("📖 Charger ce mot", use_container_width=True):
-        success, crypto = load_word_crypto(selected_word)
+    selected_word = st.selectbox("Mot:", available_words, key="dict_select")
+    if st.button("📖 Charger", use_container_width=True, key="load_btn"):
+        success, _ = load_word_crypto(selected_word)
         if success:
-            st.success(f"✅ Crypto chargée pour '{selected_word}'")
+            st.success(f"✅ {selected_word} chargé")
             st.rerun()
-        else:
-            st.error("❌ Erreur de chargement")
     
     st.markdown("---")
     
     # Métriques rapides
-    st.markdown("#### 📊 Métriques")
-    if st.session_state.current_crypto and isinstance(st.session_state.current_crypto, dict):
-        try:
-            score = calculate_security_score(st.session_state.current_crypto)
-            st.metric("Score sécurité", f"{score}/100")
-            mot = st.session_state.current_crypto.get('mot', 'N/A')
-            st.metric("Mot actuel", mot)
-            if st.session_state.current_crypto.get('hash_sha512'):
-                st.metric("Hash SHA-512", f"{st.session_state.current_crypto['hash_sha512'][:16]}...")
-        except:
-            st.metric("Statut", "Données disponibles")
+    if st.session_state.current_crypto:
+        score = calculate_security_score(st.session_state.current_crypto)
+        st.metric("Score sécurité", f"{score}/100")
+        mot = st.session_state.current_crypto.get('mot', 'N/A')
+        st.metric("Mot actuel", mot)
     
     st.markdown("---")
     
     # Historique
     if st.session_state.crypto_history:
-        st.markdown("#### 📜 Historique récent")
+        st.markdown("#### 📜 Historique")
         for item in st.session_state.crypto_history[:5]:
             st.caption(f"🔹 {item.get('mot', '?')} - {item.get('timestamp', '?')}")
     
-    st.markdown("---")
-    st.caption(f"🕐 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    st.caption(f"🔐 PyNaCl: {'✅' if HAS_NACL else '❌'}")
+    st.caption(f"🕐 {datetime.now().strftime('%H:%M:%S')}")
 
 # ============================================
 # PAGE PRINCIPALE
@@ -500,224 +492,90 @@ if st.session_state.current_crypto and isinstance(st.session_state.current_crypt
         <h1>🔐 Quantum Gradation - Cryptographie Complète</h1>
         <h2>{crypto.get('gradation', 'N/A')} → {crypto.get('mot', 'N/A')}</h2>
         <div class="info-box">
-            ✅ <strong>Cryptographie unique générée pour "{crypto.get('mot', 'N/A')}"</strong><br>
-            Timestamp: {crypto.get('timestamp', 'N/A')} | Algorithme: Ed25519
+            ✅ <strong>Cryptographie unique pour "{crypto.get('mot', 'N/A')}"</strong><br>
+            Généré le: {crypto.get('timestamp', 'N/A')[:19]} | Algorithme: Ed25519
         </div>
     </div>
     """, unsafe_allow_html=True)
     
-    # Score de sécurité
+    # Scores
     security_score = calculate_security_score(crypto)
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric("🔐 Score Sécurité", f"{security_score}/100")
     with col2:
         meta = crypto.get('metadata', {})
-        st.metric("📏 Longueur mot", f"{meta.get('longueur', 0)} lettres")
+        st.metric("📏 Longueur", f"{meta.get('longueur', 0)} lettres")
     with col3:
         st.metric("🔢 Valeur numérique", f"{meta.get('valeur_numerique', 0)}")
     with col4:
-        st.metric("✅ Statut", "VALIDE" if crypto.get('is_valid', False) else "INVALIDE")
+        st.metric("✅ Statut", "VALIDE" if crypto.get('is_valid') else "INVALIDE")
     
-    # ===== SECTION 1: HASHES MULTIPLES =====
-    st.markdown('<div class="main-card"><h3>🔐 Hash Cryptographiques Multiples</h3>', unsafe_allow_html=True)
-    
+    # Hash
+    st.markdown('<div class="main-card"><h3>🔐 Hash Cryptographiques</h3>', unsafe_allow_html=True)
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("**SHA-256:**")
-        st.code(crypto.get('hash_sha256', 'N/A'), language="text")
+        st.code(crypto.get('hash_sha256', 'N/A')[:64], language="text")
         st.markdown("**SHA-512:**")
         sha512 = crypto.get('hash_sha512', 'N/A')
-        if len(sha512) > 64:
-            st.code(sha512[:64], language="text")
-            st.code(sha512[64:], language="text")
-        else:
-            st.code(sha512, language="text")
+        st.code(sha512[:64] if len(sha512) > 64 else sha512, language="text")
     with col2:
         st.markdown("**BLAKE2b:**")
         blake = crypto.get('hash_blake2', 'N/A')
-        if len(blake) > 64:
-            st.code(blake[:64], language="text")
-            st.code(blake[64:], language="text")
-        else:
-            st.code(blake, language="text")
-        st.markdown("**Hash Composite (SHA3-512):**")
-        composite = crypto.get('hash_composite', 'N/A')
-        if len(composite) > 64:
-            st.code(composite[:64], language="text")
-            st.code(composite[64:], language="text")
-        else:
-            st.code(composite, language="text")
-    
+        st.code(blake[:64] if len(blake) > 64 else blake, language="text")
+        st.markdown("**Hash Composite:**")
+        comp = crypto.get('hash_composite', 'N/A')
+        st.code(comp[:64] if len(comp) > 64 else comp, language="text")
     st.markdown('</div>', unsafe_allow_html=True)
     
-    # ===== SECTION 2: SIGNATURE ED25519 =====
+    # Signature
     st.markdown('<div class="main-card"><h3>✍️ Signature Ed25519</h3>', unsafe_allow_html=True)
-    
     col1, col2 = st.columns(2)
     with col1:
-        st.markdown("**Clé Publique (32 bytes):**")
-        st.code(crypto.get('public_key', 'N/A'), language="text")
-        st.caption(f"Empreinte: {hashlib.sha256(crypto.get('public_key', '').encode()).hexdigest()[:16] if crypto.get('public_key') else 'N/A'}...")
+        st.markdown("**Clé Publique:**")
+        st.code(crypto.get('public_key', 'N/A')[:64], language="text")
     with col2:
-        st.markdown("**Signature (64 bytes):**")
+        st.markdown("**Signature:**")
         sig = crypto.get('signature', 'N/A')
-        if len(sig) > 64:
-            st.code(sig[:64], language="text")
-            st.code(sig[64:], language="text")
-        else:
-            st.code(sig, language="text")
+        st.code(sig[:64] if len(sig) > 64 else sig, language="text")
     
-    # Analyse avalanche
     avalanche = calculate_avalanche_for_hash(crypto.get('hash_composite', ''))
-    st.markdown(f"**Effet Avalanche:** {avalanche:.2f}% {'✅ Excellent' if 45 <= avalanche <= 55 else '⚠️ Standard'}")
+    st.markdown(f"**Effet Avalanche:** {avalanche:.2f}%")
     st.progress(min(avalanche/100, 1.0))
-    
     st.markdown('</div>', unsafe_allow_html=True)
     
-    # ===== SECTION 3: JWT ET CERTIFICAT =====
-    st.markdown('<div class="main-card"><h3>📜 JWT & Certificat X.509</h3>', unsafe_allow_html=True)
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("**JWT Complet:**")
-        jwt = crypto.get('jwt', 'N/A')
-        st.code(jwt[:150] + "..." if len(jwt) > 150 else jwt, language="text")
-        
-        try:
-            qr_jwt = qrcode.make(jwt[:200])
-            buffer = BytesIO()
-            qr_jwt.save(buffer, format="PNG")
-            st.image(buffer.getvalue(), caption="QR Code JWT", width=150)
-        except:
-            pass
-        
-        st.download_button("📥 Télécharger JWT", jwt, f"{crypto.get('mot', 'crypto')}_crypto.jwt", "text/plain")
-    
-    with col2:
-        st.markdown("**Certificat X.509:**")
-        cert = crypto.get('certificate', 'N/A')
-        st.code(cert[:200] + "..." if len(cert) > 200 else cert, language="text")
-        st.download_button("📥 Télécharger Certificat", cert, f"{crypto.get('mot', 'crypto')}_certificate.pem", "text/plain")
-    
-    st.markdown('</div>', unsafe_allow_html=True)
-    
-    # ===== SECTION 4: MÉTADONNÉES =====
-    st.markdown('<div class="main-card"><h3>📊 Métadonnées et Analyse</h3>', unsafe_allow_html=True)
-    
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.markdown("**Informations générales**")
-        st.json({
-            "Mot": crypto.get('mot', 'N/A'),
-            "Gradation": crypto.get('gradation', 'N/A'),
-            "Longueur": crypto.get('metadata', {}).get('longueur', 0),
-            "Valeur numérique": crypto.get('metadata', {}).get('valeur_numerique', 0)
-        })
-    
-    with col2:
-        st.markdown("**Sécurité**")
-        st.json({
-            "Algorithme": crypto.get('metadata', {}).get('algorithme', 'N/A'),
-            "Niveau": crypto.get('metadata', {}).get('niveau_securite', 'N/A'),
-            "Entropie seed": f"{crypto.get('metadata', {}).get('entropie_seed', 0):.3f} bits",
-            "Effet avalanche": f"{avalanche:.2f}%"
-        })
-    
-    with col3:
-        st.markdown("**Empreintes**")
-        st.json({
-            "Seed fingerprint": crypto.get('seed_fingerprint', 'N/A'),
-            "Salt": crypto.get('salt', 'N/A')[:16] + "..." if crypto.get('salt') else 'N/A',
-            "Timestamp": crypto.get('timestamp', 'N/A')[:19] if crypto.get('timestamp') else 'N/A'
-        })
-    
-    st.markdown('</div>', unsafe_allow_html=True)
-    
-    # ===== SECTION 5: QR CODES =====
-    st.markdown('<div class="main-card"><h3>📱 QR Codes - Accès rapide</h3>', unsafe_allow_html=True)
-    
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        try:
-            qr_mot = qrcode.make(crypto.get('mot', 'N/A'))
-            buffer = BytesIO()
-            qr_mot.save(buffer, format="PNG")
-            st.image(buffer.getvalue(), caption=f"Mot: {crypto.get('mot', 'N/A')}", width=120)
-        except:
-            st.info("QR Code indisponible")
-    
-    with col2:
-        try:
-            qr_gradation = qrcode.make(crypto.get('gradation', 'N/A'))
-            buffer = BytesIO()
-            qr_gradation.save(buffer, format="PNG")
-            st.image(buffer.getvalue(), caption="Gradation", width=120)
-        except:
-            st.info("QR Code indisponible")
-    
-    with col3:
-        try:
-            qr_pk = qrcode.make(crypto.get('public_key', 'N/A')[:64])
-            buffer = BytesIO()
-            qr_pk.save(buffer, format="PNG")
-            st.image(buffer.getvalue(), caption="Clé publique", width=120)
-        except:
-            st.info("QR Code indisponible")
-    
-    with col4:
-        try:
-            qr_hash = qrcode.make(crypto.get('hash_composite', 'N/A')[:64])
-            buffer = BytesIO()
-            qr_hash.save(buffer, format="PNG")
-            st.image(buffer.getvalue(), caption="Hash composite", width=120)
-        except:
-            st.info("QR Code indisponible")
-    
-    st.markdown('</div>', unsafe_allow_html=True)
-    
-    # ===== SECTION 6: EXPORT COMPLET =====
-    st.markdown('<div class="main-card"><h3>💾 Export Complet</h3>', unsafe_allow_html=True)
-    
+    # Export
+    st.markdown('<div class="main-card"><h3>💾 Export</h3>', unsafe_allow_html=True)
     export_data = {
-        "mot": crypto.get('mot', 'N/A'),
-        "gradation": crypto.get('gradation', 'N/A'),
-        "hash_sha256": crypto.get('hash_sha256', 'N/A'),
-        "hash_sha512": crypto.get('hash_sha512', 'N/A'),
-        "hash_blake2": crypto.get('hash_blake2', 'N/A'),
-        "hash_composite": crypto.get('hash_composite', 'N/A'),
-        "public_key": crypto.get('public_key', 'N/A'),
-        "signature": crypto.get('signature', 'N/A'),
-        "jwt": crypto.get('jwt', 'N/A'),
-        "certificate": crypto.get('certificate', 'N/A'),
-        "metadata": crypto.get('metadata', {})
+        "mot": crypto.get('mot'),
+        "gradation": crypto.get('gradation'),
+        "hash_sha256": crypto.get('hash_sha256'),
+        "hash_sha512": crypto.get('hash_sha512'),
+        "hash_composite": crypto.get('hash_composite'),
+        "public_key": crypto.get('public_key'),
+        "signature": crypto.get('signature'),
+        "timestamp": crypto.get('timestamp')
     }
     
-    col1, col2, col3 = st.columns(3)
+    col1, col2 = st.columns(2)
     with col1:
         st.download_button("📥 JSON Complet", json.dumps(export_data, indent=2), 
-                          f"{crypto.get('mot', 'crypto')}_crypto_complete.json", "application/json")
+                          f"{crypto.get('mot', 'crypto')}_crypto.json", "application/json")
     with col2:
-        st.download_button("📥 Signature seule", crypto.get('signature', ''), 
-                          f"{crypto.get('mot', 'crypto')}_signature.sig", "text/plain")
-    with col3:
-        st.download_button("📥 Clé publique", crypto.get('public_key', ''), 
-                          f"{crypto.get('mot', 'crypto')}_public_key.key", "text/plain")
-    
+        st.download_button("📥 JWT", crypto.get('jwt', ''), 
+                          f"{crypto.get('mot', 'crypto')}.jwt", "text/plain")
     st.markdown('</div>', unsafe_allow_html=True)
 
 else:
-    st.error("❌ Erreur: Impossible de générer la cryptographie. Vérifiez que le mot est valide (lettres A-Z uniquement).")
+    st.error("❌ Impossible de générer la cryptographie")
     st.info("💡 Essayez avec un mot simple comme 'TEST' ou 'BOURSE'")
 
 # Footer
 st.markdown("---")
 st.markdown(f"""
 <div style="text-align: center; padding: 20px; font-size: 12px; color: #666;">
-    🔐 <strong>Quantum Gradation System v5.0 - Cryptographie Complète</strong><br>
-    Chaque mot génère sa propre paire de clés unique, signature et hash multiples<br>
-    Standards: Ed25519 | SHA-256/512 | BLAKE2b | SHA3-512 | JWT | X.509<br>
-    {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} UTC
+    🔐 Quantum Gradation v5.0 | Ed25519 | SHA-256/512 | BLAKE2b<br>
+    {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 </div>
 """, unsafe_allow_html=True)
