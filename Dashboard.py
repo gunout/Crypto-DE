@@ -123,6 +123,7 @@ def gradation_to_text(gradation):
 def generate_complete_crypto_for_word(word):
     """
     Génère une cryptographie complète et unique pour un mot donné
+    Retourne un tuple (dict_or_None, error_or_None)
     """
     try:
         word_clean = word.upper().strip()
@@ -192,6 +193,7 @@ def generate_complete_crypto_for_word(word):
         # Certificat X.509 simulé
         certificate = generate_simulated_certificate(word_clean, public_key, timestamp)
         
+        # Retourner un dictionnaire unique
         return {
             "mot": word_clean,
             "gradation": gradation,
@@ -208,7 +210,8 @@ def generate_complete_crypto_for_word(word):
             "timestamp": timestamp,
             "salt": salt,
             "seed_fingerprint": hashlib.sha256(master_seed).hexdigest()[:32]
-        }
+        }, None
+        
     except Exception as e:
         return None, str(e)
 
@@ -258,7 +261,7 @@ def calculate_avalanche_for_hash(hash_value):
 
 def calculate_security_score(crypto_data):
     """Calcule un score de sécurité global (0-100)"""
-    if not crypto_data:
+    if not crypto_data or not isinstance(crypto_data, dict):
         return 0
     
     score = 0
@@ -538,7 +541,7 @@ if st.session_state.current_crypto and isinstance(st.session_state.current_crypt
             st.code(blake[64:], language="text")
         else:
             st.code(blake, language="text")
-        st.markdown("**Hash Composite:**")
+        st.markdown("**Hash Composite (SHA3-512):**")
         composite = crypto.get('hash_composite', 'N/A')
         if len(composite) > 64:
             st.code(composite[:64], language="text")
@@ -555,6 +558,7 @@ if st.session_state.current_crypto and isinstance(st.session_state.current_crypt
     with col1:
         st.markdown("**Clé Publique (32 bytes):**")
         st.code(crypto.get('public_key', 'N/A'), language="text")
+        st.caption(f"Empreinte: {hashlib.sha256(crypto.get('public_key', '').encode()).hexdigest()[:16] if crypto.get('public_key') else 'N/A'}...")
     with col2:
         st.markdown("**Signature (64 bytes):**")
         sig = crypto.get('signature', 'N/A')
@@ -566,7 +570,7 @@ if st.session_state.current_crypto and isinstance(st.session_state.current_crypt
     
     # Analyse avalanche
     avalanche = calculate_avalanche_for_hash(crypto.get('hash_composite', ''))
-    st.markdown(f"**Effet Avalanche:** {avalanche:.2f}%")
+    st.markdown(f"**Effet Avalanche:** {avalanche:.2f}% {'✅ Excellent' if 45 <= avalanche <= 55 else '⚠️ Standard'}")
     st.progress(min(avalanche/100, 1.0))
     
     st.markdown('</div>', unsafe_allow_html=True)
@@ -631,41 +635,45 @@ if st.session_state.current_crypto and isinstance(st.session_state.current_crypt
     st.markdown('</div>', unsafe_allow_html=True)
     
     # ===== SECTION 5: QR CODES =====
-    st.markdown('<div class="main-card"><h3>📱 QR Codes</h3>', unsafe_allow_html=True)
+    st.markdown('<div class="main-card"><h3>📱 QR Codes - Accès rapide</h3>', unsafe_allow_html=True)
     
     col1, col2, col3, col4 = st.columns(4)
     
-    try:
-        qr_mot = qrcode.make(crypto.get('mot', 'N/A'))
-        buffer = BytesIO()
-        qr_mot.save(buffer, format="PNG")
-        st.image(buffer.getvalue(), caption=f"Mot: {crypto.get('mot', 'N/A')}", width=120)
-    except:
-        st.write("QR Code indisponible")
+    with col1:
+        try:
+            qr_mot = qrcode.make(crypto.get('mot', 'N/A'))
+            buffer = BytesIO()
+            qr_mot.save(buffer, format="PNG")
+            st.image(buffer.getvalue(), caption=f"Mot: {crypto.get('mot', 'N/A')}", width=120)
+        except:
+            st.info("QR Code indisponible")
     
-    try:
-        qr_gradation = qrcode.make(crypto.get('gradation', 'N/A'))
-        buffer = BytesIO()
-        qr_gradation.save(buffer, format="PNG")
-        st.image(buffer.getvalue(), caption="Gradation", width=120)
-    except:
-        st.write("QR Code indisponible")
+    with col2:
+        try:
+            qr_gradation = qrcode.make(crypto.get('gradation', 'N/A'))
+            buffer = BytesIO()
+            qr_gradation.save(buffer, format="PNG")
+            st.image(buffer.getvalue(), caption="Gradation", width=120)
+        except:
+            st.info("QR Code indisponible")
     
-    try:
-        qr_pk = qrcode.make(crypto.get('public_key', 'N/A')[:64])
-        buffer = BytesIO()
-        qr_pk.save(buffer, format="PNG")
-        st.image(buffer.getvalue(), caption="Clé publique", width=120)
-    except:
-        st.write("QR Code indisponible")
+    with col3:
+        try:
+            qr_pk = qrcode.make(crypto.get('public_key', 'N/A')[:64])
+            buffer = BytesIO()
+            qr_pk.save(buffer, format="PNG")
+            st.image(buffer.getvalue(), caption="Clé publique", width=120)
+        except:
+            st.info("QR Code indisponible")
     
-    try:
-        qr_hash = qrcode.make(crypto.get('hash_composite', 'N/A')[:64])
-        buffer = BytesIO()
-        qr_hash.save(buffer, format="PNG")
-        st.image(buffer.getvalue(), caption="Hash composite", width=120)
-    except:
-        st.write("QR Code indisponible")
+    with col4:
+        try:
+            qr_hash = qrcode.make(crypto.get('hash_composite', 'N/A')[:64])
+            buffer = BytesIO()
+            qr_hash.save(buffer, format="PNG")
+            st.image(buffer.getvalue(), caption="Hash composite", width=120)
+        except:
+            st.info("QR Code indisponible")
     
     st.markdown('</div>', unsafe_allow_html=True)
     
@@ -701,6 +709,7 @@ if st.session_state.current_crypto and isinstance(st.session_state.current_crypt
 
 else:
     st.error("❌ Erreur: Impossible de générer la cryptographie. Vérifiez que le mot est valide (lettres A-Z uniquement).")
+    st.info("💡 Essayez avec un mot simple comme 'TEST' ou 'BOURSE'")
 
 # Footer
 st.markdown("---")
