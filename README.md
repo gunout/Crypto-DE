@@ -5,4 +5,10 @@
 
     https://crypto-de.streamlit.app/
 
+# EXAMPLE 
+
+<img width="1627" height="747" alt="Screenshot 2026-07-28 at 14-09-48 Quantum Gradation - Crypto Complète · Streamlit" src="https://github.com/user-attachments/assets/1d25846f-9153-440d-8606-17393e41b643" />
+
+
+
 LOGIC By Gleaphe 2026 .
